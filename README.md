@@ -1,89 +1,75 @@
-# MattDownloader — GitHub relay (workflows template)
+# MattDownloader GitHub Relay
 
-This repository holds **GitHub Actions workflows** only: a small “relay” that downloads a file on GitHub’s runners, stores it under `jobs/<job_id>/` on **your** fork, and lets a companion mobile app pull it down later.
+This repository is a GitHub Actions template for **MattDownloader**. It downloads files on GitHub runners, stores the result in your fork under `jobs/<job_id>/`, and lets the Android app fetch the prepared file later.
 
-## Inspiration
+The idea is inspired by [soheilditf5-svg/downloader](https://github.com/soheilditf5-svg/downloader): use GitHub Actions as a stable relay when direct phone downloads are slow, blocked, or unreliable.
 
-The idea is **inspired by** [soheilditf5-svg/downloader](https://github.com/soheilditf5-svg/downloader): use GitHub Actions as a stable middle step when direct downloads from the phone are slow, blocked, or keep failing mid-file.
+## What this repo contains
 
-This template is maintained for **MattDownloader** and tuned for that app’s manifest format and cleanup flows.
+- `.github/workflows/` relay workflows.
+- `README.md` and `.gitignore`.
+- No mobile app source code.
+- No APK in the git tree. Download the MattDownloader APK from this repository's **Releases** page.
 
-## Why use this?
+Actions create `jobs/<job_id>/` on your fork after successful downloads. That folder contains the manifest and downloaded file data that the app reads.
 
-- **More reliable than browser-only downloads** on bad links or unstable networks; the heavy HTTP fetch runs on Actions, not on the phone.
-- **Useful when many CDNs or sites are hard to reach** but GitHub is still reachable — the phone talks mainly to GitHub with a token you control.
-- **Your fork, your data** — artifacts live in a private or public repo **you** own; no third-party download server.
-- **Clear lifecycle** — prepare job, download to device from the API, optionally remove the job folder when finished.
+## How to use
 
-**What we changed in this relay (vs the general “Actions as downloader” idea):** we standardize on a **`manifest.json`** per job (mode, size, suggested filename, paths), **split large files at ~95 MB** into ordered chunks so the GitHub API stays practical, **validate `job_id`** for safe paths, and ship companion workflows to **`delete-job`** when the user is done plus **scheduled cleanup** of old `jobs/*` folders. Everything is laid out so a **mobile client** can poll, pull blobs or chunks, merge on device, and export to local storage—without you hosting a separate backend.
+1. **Fork this repository.** On GitHub, click **Fork** and create your own copy. Your fork can be public or private.
+2. **Copy your fork repo URL.** Use the repository you forked, not the original template. It will look like `https://github.com/yourname/your-fork` or `yourname/your-fork`.
+3. **Enable Actions on your fork.** Open your fork's **Actions** tab and allow workflows if GitHub asks.
+4. **Install MattDownloader.** Download the latest APK from this repository's **Releases** page, install it, and open the app.
+5. **Create a fine-grained GitHub token.** Open [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) and click **Generate new token**. Configure it as follows:
+   - **Token name**: anything you like (for example `mattdownloader-relay`).
+   - **Expiration**: pick whatever you prefer; you can regenerate later.
+   - **Resource owner**: the account that owns your fork.
+   - **Repository access**: choose **Only select repositories** and pick your fork.
+   - **Repository permissions**:
+     - **Contents**: **Read-only** (the app reads `manifest.json` and prepared file blobs from your fork; the workflow itself commits using GitHub's built-in `GITHUB_TOKEN`).
+     - **Actions**: **Read and write** (so the app can dispatch workflows and check run status).
+     - **Metadata**: **Read-only** (auto-selected by GitHub).
+   - Click **Generate token** and copy the value once. You will not see it again.
+6. **Add the token and fork URL to the app.** In MattDownloader settings, paste the token and enter your fork as `owner/repo` (or the full URL). Save.
+7. **Start downloading.** Give MattDownloader a file URL. The app dispatches the workflow on your fork, waits for `manifest.json`, then downloads the prepared file from GitHub.
 
-**Mobile app:** **MattDownloader** is the official companion app. Download the **release APK** from the **Releases** page of **this same repository** (pre-built Android package only—**no** mobile source code lives in this repo). The app stores your token, lists jobs, saves files to your phone, and can dispatch delete/cleanup against your fork.
+If setup fails, check that Actions are enabled, the token is valid, and the repo URL points to your fork instead of the upstream template.
 
-## MattDownloader app (releases only)
+## Why use it
 
-This repository’s **git tree** contains workflows and docs only—not the mobile app source. The **MattDownloader** Android **APK** is published on **this repo’s GitHub Releases** page: open **Releases**, pick the latest version, and download the attached APK. Install it on your phone, then continue with fork setup below. You do **not** need the app source code to use the relay—only your fork of this template and that release build.
+- GitHub Actions handles the heavy HTTP download instead of your phone.
+- Files live in your own fork, under your GitHub account.
+- Large files are split into chunks of about 95 MB so the GitHub API remains practical.
+- Jobs can be deleted from the app when you are finished.
 
-## What belongs here
+## Workflows
 
-| Included | Not included |
-|----------|----------------|
-| `.github/workflows/` | Mobile app **source code** |
-| This `README.md`, `.gitignore` | *(APK is not in the tree—get it from **Releases** on this repo.)* |
+- **`download-split.yml`**: accepts `file_url` and `job_id`, downloads the file, writes `jobs/<job_id>/manifest.json`, splits large files, and commits the result.
+- **`delete-job.yml`**: accepts `job_id`, removes `jobs/<job_id>/`, and commits the cleanup.
+- **`cleanup-expired-jobs.yml`**: scheduled cleanup for old `jobs/*` folders.
 
-**Created by Actions (on your default branch):** `jobs/<job_id>/` — manifests and file chunks the app reads; remove when you no longer need them.
+## App contract
+
+After `download-split.yml` succeeds, the app reads `jobs/<job_id>/manifest.json`.
+
+- `suggested_filename`: safe filename for saving on device.
+- `mode: "single"`: fetch `jobs/<job_id>/file.bin`.
+- `mode: "chunked"`: fetch `jobs/<job_id>/chunks/*` in order and merge on device.
+
+`job_id` must be 6-64 characters and use only `A-Z`, `a-z`, `0-9`, `_`, or `-`.
+
+## Security note
+
+Use a fine-grained personal access token limited to only your fork. Avoid classic tokens with broad account access unless you understand the risk.
 
 ## Donate
 
-If this template or MattDownloader helps you, optional donations are welcome (always verify chain and address in your wallet):
+If this template or MattDownloader helps you, optional donations are welcome. Always verify the chain and address in your wallet.
 
 | Asset | Network | Address |
 |-------|---------|---------|
 | **USDT** | Polygon | `0xacef000D72eb46Af92F32252fe2bCE146aa9c2E0` |
 | **USDT** | TRON (TRC20) | `TFpeKzEakmSXXi7MXBt1VZVfErB3kXHyL7` |
 
-## Folder layout
+## License
 
-- `.github/workflows/` — workflow definitions  
-- `jobs/<job_id>/` — appears after a successful run (not shipped in the empty template)
-
-## Workflows
-
-- **`download-split.yml`** (*Download and Prepare Job*)  
-  **Inputs:** `file_url`, `job_id`  
-  Downloads the URL, splits if ≥ 95 MB, writes `jobs/<job_id>/manifest.json`, commits and pushes.
-
-- **`delete-job.yml`** (*Delete Job*)  
-  **Input:** `job_id`  
-  Deletes `jobs/<job_id>/` and pushes.
-
-- **`cleanup-expired-jobs.yml`**  
-  Scheduled cleanup of old `jobs/*` folders (see the workflow file for rules).
-
-## App integration contract
-
-After `download-split.yml` succeeds, the client reads **`jobs/<job_id>/manifest.json`**, then:
-
-- **`suggested_filename`** — safe basename from the source URL; the app saves under its own downloads tree using this name.
-- **`mode: "single"`** — fetch `jobs/<job_id>/file.bin`
-- **`mode: "chunked"`** — fetch `jobs/<job_id>/chunks/*` in sorted order and merge on device.
-
-When the user is done, the app should dispatch **`delete-job.yml`** with the same `job_id` (for example on “Remove” in the app). The app does **not** auto-delete immediately after a successful save, so users can re-download or inspect until they remove the job.
-
-`job_id` must match workflow validation: **6–64** characters, `[A-Za-z0-9_-]` only.
-
-## Fork setup (each user)
-
-A **fork** is your own GitHub copy of this template, under **your** account. Workflow runs, commits, and `jobs/<job_id>/` data all happen on **your** fork—not on someone else’s repo—so you keep control and quotas.
-
-1. **Fork this repository** on GitHub (use the **Fork** button). Pick yourself or an org as the owner. You can keep the default name or rename the repo; what matters later is the **`owner/repo`** URL (for example `https://github.com/yourname/your-fork`).
-2. Open your fork on GitHub, go to the **Actions** tab, and **allow workflows** if GitHub shows a one-time prompt. Without this, prepare and delete jobs cannot run.
-3. Download the **MattDownloader** **APK** from the **Releases** page of **this repository**. Install the APK, open the app, then go to **Settings**.
-4. **Create a token in the app’s guided flow** (recommended: a **fine-grained personal access token**). The app walks you through GitHub’s screens and the exact **permissions** this relay needs—scoped to **only your fork**, not your whole GitHub account.
-5. In the app, enter **your fork’s repository** as `owner/repo` (same as in the browser address bar after `github.com/`) and **paste the token** where the app asks for it. Save. The app uses that pair to dispatch workflows, read `manifest.json`, and download prepared files from **your** fork.
-
-If something fails, re-check that Actions are enabled on the fork, the token is still valid, and `owner/repo` matches the fork you actually forked—not the upstream template URL.
-
-## Security note
-
-- Prefer a **fine-grained PAT** limited to the single fork, or a **GitHub App** installed only on that repo, over a classic PAT with full `repo` across the account.
-- The **Actions** run uses `GITHUB_TOKEN` to push job commits; the user’s app token is for dispatch + API reads as you define.
+Released under the [MIT License](./LICENSE).
